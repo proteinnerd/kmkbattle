@@ -34,6 +34,33 @@ type Punishment = {
   points?: number;
 };
 
+async function getPunishments(supabase: any, leagueId: number): Promise<any[]> {
+  const result = await supabase
+    .from('punishments')
+    .select('*')
+    .eq('league_id', leagueId);
+  return result.data || [];
+}
+
+async function getLeague(supabase: any, leagueId: number): Promise<any> {
+  const result = await supabase
+    .from('leagues')
+    .select('*')
+    .eq('fpl_league_id', leagueId)
+    .single();
+  return result.data;
+}
+
+async function insertLeague(supabase: any, leagueId: number, name: string): Promise<any> {
+  const result = await supabase
+    .from('leagues')
+    .insert({
+      fpl_league_id: leagueId,
+      name: name
+    });
+  return result.data;
+}
+
 export async function GET(
   request: Request,
   { params }: { params: { id: string } }
@@ -78,56 +105,28 @@ export async function GET(
       const gameweekHistory = gameweekHistories.flat();
       
       // Check if this league exists in our database
-      const { data: existingLeague } = await supabase
-        .from('leagues')
-        .select('*')
-        .eq('fpl_league_id', leagueId)
-        .single();
+      const existingLeague = await getLeague(supabase, leagueId);
       
       // If the league doesn't exist, add it
       if (!existingLeague) {
-        await supabase.from('leagues').insert({
-          fpl_league_id: leagueId,
-          name: leagueData.league.name
-        });
+        await insertLeague(supabase, leagueId, leagueData.league.name);
       }
       
       // Get punishment data from our database
-      let { data: punishments } = await (supabase
-        .from('punishments')
-        .select('*')
-        .eq('league_id', leagueId) as any);
-
-      // If no punishments exist, generate them for all gameweeks
-      if (!punishments || punishments.length === 0) {
-        const currentGw = currentGameweek.id;
-        for (let gw = 1; gw <= currentGw; gw++) {
-          await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/punishment`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ league_id: leagueId, gameweek_id: gw })
-          });
-        }
-        // Fetch punishments again after generation
-        const result = await supabase
-          .from('punishments')
-          .select('*')
-          .eq('league_id', leagueId);
-        punishments = result.data;
-      }
+      const punishments = await getPunishments(supabase, leagueId);
       
       // Process standings to include punishment data
       const standings = leagueData.standings.results.map((entry: any) => {
         // Find punishments for this entry
-        const entryPunishments = punishments?.filter(p => p.player_id === entry.entry) || [];
+        const entryPunishments = punishments?.filter((p: any) => p.player_id === entry.entry) || [];
         
         return {
           ...entry,
           punishments: {
             total: entryPunishments.length,
-            completed: entryPunishments.filter(p => p.is_completed).length,
-            pending: entryPunishments.filter(p => !p.is_completed).length,
-            distance_km: entryPunishments.reduce((sum, p) => sum + p.distance_km, 0)
+            completed: entryPunishments.filter((p: any) => p.is_completed).length,
+            pending: entryPunishments.filter((p: any) => !p.is_completed).length,
+            distance_km: entryPunishments.reduce((sum: number, p: any) => sum + p.distance_km, 0)
           }
         };
       });
