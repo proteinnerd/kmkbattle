@@ -2,6 +2,13 @@ import { NextResponse } from 'next/server';
 import { getCurrentGameweek } from '@/app/lib/fpl-api';
 import { supabase } from '@/app/lib/supabase';
 
+async function deleteLeaguePunishments(supabase: any, leagueId: number): Promise<void> {
+  await supabase
+    .from('punishments')
+    .delete()
+    .eq('league_id', leagueId);
+}
+
 export async function POST(
   request: Request,
   { params }: { params: { id: string } }
@@ -13,7 +20,7 @@ export async function POST(
     }
 
     // Delete all punishments for this league
-    await supabase.from('punishments').delete().eq('league_id', leagueId);
+    await deleteLeaguePunishments(supabase, leagueId);
 
     // Get current gameweek
     const currentGameweek = await getCurrentGameweek();
