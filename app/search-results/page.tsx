@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import ErrorDisplay from '../components/ErrorDisplay';
@@ -11,7 +11,7 @@ interface Player {
   team: number;
 }
 
-export default function SearchResults() {
+function SearchResultsInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const query = searchParams.get('q');
@@ -170,5 +170,13 @@ export default function SearchResults() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SearchResultsPage() {
+  return (
+    <Suspense fallback={<div>Loading search results...</div>}>
+      <SearchResultsInner />
+    </Suspense>
   );
 } 
