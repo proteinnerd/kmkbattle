@@ -21,6 +21,19 @@ interface GameweekHistory {
   points_on_bench: number;
 }
 
+type Punishment = {
+  id: string;
+  player_id: number;
+  gameweek_id: number;
+  league_id: number;
+  distance_km: number;
+  is_completed: boolean;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  points?: number;
+};
+
 export async function GET(
   request: Request,
   { params }: { params: { id: string } }
@@ -80,10 +93,10 @@ export async function GET(
       }
       
       // Get punishment data from our database
-      let { data: punishments } = await supabase
+      let { data: punishments } = await (supabase
         .from('punishments')
         .select('*')
-        .eq('league_id', leagueId);
+        .eq('league_id', leagueId) as any);
 
       // If no punishments exist, generate them for all gameweeks
       if (!punishments || punishments.length === 0) {
