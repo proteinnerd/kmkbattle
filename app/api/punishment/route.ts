@@ -5,6 +5,70 @@ import { PostgrestFilterBuilder } from '@supabase/postgrest-js';
 import { fetchLeagueDetails, fetchEntryHistory, LeagueDetails, EntryHistory } from '@/app/lib/fpl';
 import { PostgrestError } from '@supabase/supabase-js';
 
+// Add this helper function near the top of the file:
+async function getPunishments(supabase: any, filters: { 
+  leagueId?: number; 
+  playerId?: number; 
+  gameweekId?: number;
+  isCompleted?: boolean;
+} = {}): Promise<any[]> {
+  let query = supabase.from('punishments').select();
+  
+  if (filters.leagueId) {
+    query = query.eq('league_id', filters.leagueId);
+  }
+  if (filters.playerId) {
+    query = query.eq('player_id', filters.playerId);
+  }
+  if (filters.gameweekId) {
+    query = query.eq('gameweek_id', filters.gameweekId);
+  }
+  if (filters.isCompleted !== undefined) {
+    query = query.eq('is_completed', filters.isCompleted);
+  }
+  
+  const result = await query;
+  return result.data || [];
+}
+
+// Add these helper functions near the top with getPunishments:
+async function checkExistingPunishment(supabase: any, leagueId: number, playerId: number, gameweekId: number): Promise<any> {
+  const result = await supabase
+    .from('punishments')
+    .select('*')
+    .eq('league_id', leagueId)
+    .eq('player_id', playerId)
+    .eq('gameweek_id', gameweekId)
+    .single();
+  return result.data;
+}
+
+async function createPunishment(supabase: any, punishment: any): Promise<any> {
+  const result = await supabase
+    .from('punishments')
+    .insert(punishment)
+    .select();
+  return result.data?.[0];
+}
+
+async function updatePunishment(supabase: any, id: string, updateData: any): Promise<any> {
+  const result = await supabase
+    .from('punishments')
+    .update(updateData)
+    .eq('id', id)
+    .select();
+  return result.data?.[0];
+}
+
+// Add this helper function near the top with the other helpers:
+async function createPunishments(supabase: any, punishments: any[]): Promise<any[]> {
+  const result = await supabase
+    .from('punishments')
+    .insert(punishments)
+    .select();
+  return result.data || [];
+}
+
 // GET: Get all punishments or filter by query params
 export async function GET(request: Request) {
   try {
@@ -15,29 +79,14 @@ export async function GET(request: Request) {
     const isCompleted = searchParams.get('is_completed');
     
     // Start with base query
-    let query = supabase.from('punishments').select();
+    let punishments = await getPunishments(supabase, {
+      leagueId: leagueId ? parseInt(leagueId) : undefined,
+      playerId: playerId ? parseInt(playerId) : undefined,
+      gameweekId: gameweekId ? parseInt(gameweekId) : undefined,
+      isCompleted: isCompleted !== null ? isCompleted === 'true' : undefined
+    });
     
-    // Apply filters if they exist
-    if (leagueId) {
-      query = query.eq('league_id', leagueId) as PostgrestFilterBuilder<any, any, any>;
-    }
-    if (playerId) {
-      query = query.eq('player_id', playerId) as PostgrestFilterBuilder<any, any, any>;
-    }
-    if (gameweekId) {
-      query = query.eq('gameweek_id', gameweekId) as PostgrestFilterBuilder<any, any, any>;
-    }
-    if (isCompleted !== null) {
-      query = query.eq('is_completed', isCompleted === 'true') as PostgrestFilterBuilder<any, any, any>;
-    }
-    
-    const { data, error } = await query;
-    
-    if (error) {
-      throw error;
-    }
-    
-    return NextResponse.json(data);
+    return NextResponse.json(punishments);
   } catch (error) {
     console.error('Error fetching punishments:', error);
     return NextResponse.json(
@@ -61,13 +110,7 @@ export async function POST(request: Request) {
     }
     
     // Check if punishment already exists
-    const { data: existingPunishment } = await supabase
-      .from('punishments')
-      .select('*')
-      .eq('league_id', league_id)
-      .eq('player_id', player_id)
-      .eq('gameweek_id', gameweek_id)
-      .single();
+    const existingPunishment = await checkExistingPunishment(supabase, league_id, player_id, gameweek_id);
     
     if (existingPunishment) {
       return NextResponse.json(
@@ -77,19 +120,15 @@ export async function POST(request: Request) {
     }
     
     // Create new punishment
-    const { data, error } = await supabase.from('punishments').insert({
+    const data = await createPunishment(supabase, {
       league_id,
       player_id,
       gameweek_id,
       distance_km,
       is_completed: false
-    }).select();
+    });
     
-    if (error) {
-      throw error;
-    }
-    
-    return NextResponse.json(data[0], { status: 201 });
+    return NextResponse.json(data, { status: 201 });
   } catch (error) {
     console.error('Error creating punishment:', error);
     return NextResponse.json(
@@ -122,17 +161,9 @@ export async function PUT(request: Request) {
       }
     }
     
-    const { data, error } = await supabase
-      .from('punishments')
-      .update(updateData)
-      .eq('id', id)
-      .select();
+    const data = await updatePunishment(supabase, id, updateData);
     
-    if (error) {
-      throw error;
-    }
-    
-    return NextResponse.json(data[0]);
+    return NextResponse.json(data);
   } catch (error) {
     console.error('Error updating punishment:', error);
     return NextResponse.json(
@@ -237,69 +268,41 @@ export async function PATCH(request: Request) {
     // Create punishments for all punished players
     const punishments: PunishmentResponse[] = [];
     for (const punished of punishedPlayers) {
-      try {
-        // Check if punishment already exists
-        const { data: existingPunishments, error: queryError } = await supabase
-          .from('punishments')
-          .select('*')
-          .eq('player_id', punished.player_id)
-          .eq('gameweek_id', gameweek_id)
-          .eq('league_id', league_id);
+      // Check if punishment already exists
+      const existingPunishment = await checkExistingPunishment(
+        supabase,
+        league_id,
+        punished.player_id,
+        gameweek_id
+      );
 
-        if (queryError) throw queryError;
-
-        const existingPunishment = existingPunishments?.[0];
-
-        if (!existingPunishment) {
-          // Create new punishment
-          const { data: newPunishments, error } = await supabase
-            .from('punishments')
-            .insert({
-              player_id: punished.player_id,
-              gameweek_id: gameweek_id,
-              league_id: league_id,
-              distance_km: distancePerPlayer,
-              is_completed: false,
-              completed_at: null
-            })
-            .select();
-
-          if (error) throw error;
-          if (!newPunishments?.length) throw new Error('Failed to create punishment');
-          const punishment = newPunishments[0];
-          punishments.push({
-            ...punishment,
-            player_name: punished.player_name,
-            entry_name: punished.entry_name,
-            points: punished.points,
-            already_existed: false
-          });
-        } else {
-          // Update existing punishment with correct distance
-          const { data: updatedPunishments, error: updateError } = await supabase
-            .from('punishments')
-            .update({ distance_km: distancePerPlayer })
-            .eq('id', existingPunishment.id)
-            .select();
-
-          if (updateError) throw updateError;
-          const updatedPunishment = updatedPunishments?.[0] || existingPunishment;
-          punishments.push({
-            ...updatedPunishment,
-            player_name: punished.player_name,
-            entry_name: punished.entry_name,
-            points: punished.points,
-            already_existed: true
-          });
-        }
-      } catch (error) {
-        if (error instanceof PostgrestError) {
-          console.error(`Supabase error for player ${punished.player_id}:`, error.message);
-        } else {
-          console.error(`Error processing punishment for player ${punished.player_id}:`, error);
-        }
-        throw error;
+      if (existingPunishment) {
+        punishments.push({
+          ...existingPunishment,
+          player_name: punished.player_name,
+          entry_name: punished.entry_name,
+          points: punished.points,
+          already_existed: true
+        });
+        continue;
       }
+
+      // Create new punishment
+      const newPunishment = await createPunishment(supabase, {
+        league_id,
+        player_id: punished.player_id,
+        gameweek_id,
+        distance_km: distancePerPlayer,
+        is_completed: false
+      });
+
+      punishments.push({
+        ...newPunishment,
+        player_name: punished.player_name,
+        entry_name: punished.entry_name,
+        points: punished.points,
+        already_existed: false
+      });
     }
 
     return NextResponse.json({
