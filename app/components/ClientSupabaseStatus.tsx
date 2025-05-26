@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from '@/app/lib/supabase';
+import { supabase as _supabase } from '@/app/lib/supabase';
+const supabase: any = _supabase;
 
 export default function ClientSupabaseStatus() {
   const [status, setStatus] = useState<'checking' | 'connected' | 'error'>('checking');
@@ -14,8 +15,7 @@ export default function ClientSupabaseStatus() {
         // Try to query the database
         const { data, error } = await supabase
           .from('punishments')
-          .select('*')
-          .limit(1);
+          .select('*');
         
         if (error) {
           setStatus('error');
