@@ -9,6 +9,33 @@ import {
 } from '@/app/lib/fpl-api';
 import { supabase } from '@/app/lib/supabase';
 
+async function getPlayerPunishments(supabase: any, playerId: string): Promise<any[]> {
+  const result = await supabase
+    .from('punishments')
+    .select('*')
+    .eq('player_id', playerId);
+  return result.data || [];
+}
+
+async function getOrCreateLeague(supabase: any, leagueId: number, leagueName: string): Promise<any> {
+  const result = await supabase
+    .from('leagues')
+    .select('*')
+    .eq('fpl_league_id', leagueId)
+    .single();
+  
+  if (!result.data) {
+    await supabase
+      .from('leagues')
+      .insert({
+        fpl_league_id: leagueId,
+        name: leagueName
+      });
+  }
+  
+  return result.data;
+}
+
 export async function GET(
   request: Request,
   { params }: { params: { id: string } }
@@ -51,20 +78,8 @@ export async function GET(
       if (entryData && entryData.leagues && entryData.leagues.classic) {
         leagues = await Promise.all(
           entryData.leagues.classic.map(async (league: any) => {
-            // Check if league exists in our database
-            const { data: existingLeague } = await supabase
-              .from('leagues')
-              .select('*')
-              .eq('fpl_league_id', league.id)
-              .single();
-            
-            // If not, add it
-            if (!existingLeague) {
-              await supabase.from('leagues').insert({
-                fpl_league_id: league.id,
-                name: league.name
-              });
-            }
+            // Check if league exists in our database and create if needed
+            await getOrCreateLeague(supabase, league.id, league.name);
             
             return {
               id: league.id,
@@ -80,10 +95,7 @@ export async function GET(
     }
     
     // Get punishment data from our database
-    const { data: punishments } = await supabase
-      .from('punishments')
-      .select('*')
-      .eq('player_id', playerId.toString());
+    const punishments = await getPlayerPunishments(supabase, playerId.toString());
     
     // Get team name
     const teamName = await getTeamNameById(playerData.team);
