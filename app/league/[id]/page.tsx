@@ -86,61 +86,26 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
     const fetchLeagueDetails = async () => {
       try {
         setIsLoading(true);
-        console.log(`Fetching league details for ID: ${leagueId}`);
-        
-        const response = await fetch(`/api/league/${leagueId}`);
-        const responseData = await response.json();
-        
-        if (!response.ok) {
-          throw new Error(responseData.error || 'Failed to fetch league details');
-        }
-        
-        const data = responseData as LeagueDetails;
-        console.log('League data received:', data);
-        setLeagueDetails(data);
-        
-        // Build a set of all gameweeks from punishments
-        const allGameweeks = Array.from(new Set((data.punishments || []).map(p => p.gameweek_id)));
-        allGameweeks.sort((a, b) => b - a); // Descending order
+        setError(null);
+        // Fetch FPL league data directly from the public API
+        const fplRes = await fetch(`https://fantasy.premierleague.com/api/leagues-classic/${leagueId}/standings/`);
+        if (!fplRes.ok) throw new Error('Failed to fetch FPL league');
+        const fplData = await fplRes.json();
 
-        // For each gameweek, show all participants
-        const gameweekPunishments: GameweekPunishment[] = allGameweeks.map((gw) => {
-          const losers = data.standings.map((player) => {
-            // Find punishment for this player in this gameweek
-            const punishment = (data.punishments || []).find(p => p.player_id === player.entry && p.gameweek_id === gw);
-            // Find points for this player in this gameweek
-            const points = (data.gameweekHistory || []).find(h => h.entry === player.entry && h.event === gw)?.points || 0;
-            return {
-              playerName: player.player_name,
-              entryName: player.entry_name,
-              entry: player.entry,
-              points,
-              distance_km: punishment ? punishment.distance_km : 0,
-              is_completed: punishment ? punishment.is_completed : false,
-              punishmentId: punishment ? punishment.id : ''
-            };
-          });
-          return { gameweek: gw, losers };
+        // Optionally, fetch punishments from Supabase (client-side)
+        // Uncomment and configure if you want to fetch punishments
+        // import { createClient } from '@supabase/supabase-js';
+        // const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+        // const { data: punishments } = await supabase.from('punishments').select('*').eq('league_id', leagueId);
+
+        // For now, just use FPL data
+        setLeagueDetails({
+          id: fplData.league.id,
+          name: fplData.league.name,
+          standings: fplData.standings.results,
+          // Add more fields/calculations as needed
         });
-        setHistoricalPunishments(gameweekPunishments);
-        
-        // Calculate total kilometers
-        if (data.punishments && Array.isArray(data.punishments)) {
-          const total = data.punishments.reduce((sum: number, punishment: {
-            distance_km: number;
-            player_id: number;
-          }) => {
-            // Only count punishments for the current player
-            const currentPlayer = data.standings[0]?.entry;
-            if (punishment.player_id === currentPlayer) {
-              return sum + (punishment.distance_km || 0);
-            }
-            return sum;
-          }, 0);
-          setTotalKilometers(total);
-        }
       } catch (err) {
-        console.error('Error fetching league details:', err);
         setError({
           message: err instanceof Error ? err.message : 'An error occurred',
           details: err instanceof Error && err.stack ? err.stack : undefined
@@ -149,7 +114,6 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
         setIsLoading(false);
       }
     };
-    
     fetchLeagueDetails();
   }, [leagueId]);
 
@@ -197,16 +161,8 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
       
       // Calculate total kilometers
       if (data.punishments && Array.isArray(data.punishments)) {
-        const total = data.punishments.reduce((sum: number, punishment: {
-          distance_km: number;
-          player_id: number;
-        }) => {
-          // Only count punishments for the current player
-          const currentPlayer = data.standings[0]?.entry;
-          if (punishment.player_id === currentPlayer) {
-            return sum + (punishment.distance_km || 0);
-          }
-          return sum;
+        const total = data.punishments.reduce((sum: number, punishment: { distance_km: number }) => {
+          return sum + (punishment.distance_km || 0);
         }, 0);
         setTotalKilometers(total);
       }

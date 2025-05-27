@@ -1,5 +1,5 @@
 // FPL API endpoints
-const FPL_API_BASE = 'https://fantasy.premierleague.com/api';
+const FPL_API_BASE = process.env.NEXT_PUBLIC_FPL_PROXY_URL || 'http://localhost:3001/api';
 import { safeFetch } from './api-utils';
 
 // Cache for API responses to avoid unnecessary requests
@@ -45,7 +45,7 @@ export function clearCache() {
 export async function getBootstrapStatic() {
   console.log('Fetching FPL bootstrap static data');
   try {
-    const data = await fetchWithErrorHandling(`${FPL_API_BASE}/bootstrap-static/`);
+    const data = await fetchWithErrorHandling(`${FPL_API_BASE}/bootstrap-static`);
     console.log('Bootstrap data fetched successfully');
     return data;
   } catch (error) {
@@ -64,7 +64,7 @@ export async function getPlayerDetails(playerId: number) {
 export async function getLeagueDetails(leagueId: number) {
   console.log(`Fetching league details for ID: ${leagueId}`);
   try {
-    const data = await fetchWithErrorHandling(`${FPL_API_BASE}/leagues-classic/${leagueId}/standings/`);
+    const data = await fetchWithErrorHandling(`${FPL_API_BASE}/leagues/${leagueId}`);
     
     // Validate the response structure
     if (!data || typeof data !== 'object') {
@@ -93,7 +93,7 @@ export async function getLeagueDetails(leagueId: number) {
 // Get league entries (all players in a league)
 export async function getLeagueEntries(leagueId: number, page = 1) {
   console.log(`Fetching league entries for league ID: ${leagueId}, page: ${page}`);
-  return fetchWithErrorHandling(`${FPL_API_BASE}/leagues-classic/${leagueId}/standings/?page_standings=${page}`);
+  return fetchWithErrorHandling(`${FPL_API_BASE}/leagues/${leagueId}?page_standings=${page}`);
 }
 
 // Get team/user entry by ID
@@ -106,7 +106,7 @@ export async function getEntry(entryId: number) {
 export async function getEntryHistory(entryId: number) {
   console.log(`Fetching entry history for ID: ${entryId}`);
   try {
-    const data = await fetchWithErrorHandling(`${FPL_API_BASE}/entry/${entryId}/history/`);
+    const data = await fetchWithErrorHandling(`${FPL_API_BASE}/entry/${entryId}/history`);
     
     // Validate the response structure
     if (!data || typeof data !== 'object') {

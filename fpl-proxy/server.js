@@ -5,9 +5,14 @@ const fetch = require('node-fetch');
 const app = express();
 const port = process.env.PORT || 3001;
 
-// Enable CORS for your Vercel app
+// Parse CORS origins from environment variable or use defaults
+const corsOrigins = process.env.CORS_ORIGINS 
+  ? process.env.CORS_ORIGINS.split(',')
+  : ['https://kmkbattle.vercel.app', 'http://localhost:3000'];
+
+// Enable CORS for specified origins
 app.use(cors({
-  origin: ['https://kmkbattle.vercel.app', 'http://localhost:3000']
+  origin: corsOrigins
 }));
 
 // Cache for API responses
@@ -142,9 +147,14 @@ app.get('/api/entry/:entryId/history', async (req, res) => {
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    corsOrigins
+  });
 });
 
 app.listen(port, () => {
   console.log(`FPL Proxy server running on port ${port}`);
+  console.log('Allowed CORS origins:', corsOrigins);
 }); 
